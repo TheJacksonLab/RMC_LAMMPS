@@ -140,16 +140,44 @@ rng_type_source(device_type_source()), rng_type_destination(device_type_destinat
         dopant_charges[j+1][i] = dopant_charges[j][i] + temp_delta_dopant;
      }
   }
-  
+ 
+  // Print them out for storage
+  //if (comm->me == 0)
+  //{
+  //  for (int i=0;i<num_charge_states;i++)
+  //  {
+  //     fmt::print(screen, "{} {}\n", "Charge State: ", charges[i]);
+  //     fmt::print(screen, "{}\n", "Semiconductor");
+  //     for (int j=0;j<semiconductor_size;j++)
+  //     {
+  //        fmt::print(screen, "{}\n", semiconductor_charges[i][j]);
+  //     }
+  //     fmt::print(screen, "{}\n", "Dopant");
+  //     for (int j=0;j<dopant_size;j++)
+  //     {
+  //        fmt::print(screen, "{}\n", dopant_charges[i][j]);
+  //     }
+  //
+  //  }
+  //}
+ 
   // Create and populate the delta_g list for various charge states 
   delta_g_list = new double [num_charge_states];
-  delta_g_list[0] = 0;
-  double temp_delta_delta_g = delta_g/(num_charge_states-1.0);   
-   
-  for (int i=0;i<num_charge_states-1;i++)
+  TextFileReader barrier_data("barrier_list.dat", "barriers");
+  char *barriers = barrier_data.next_line(num_charge_states);
+  ValueTokenizer vt_barrier(barriers);
+  for (int i=0;i<num_charge_states;i++)
   {
-     delta_g_list[i+1] = delta_g_list[i] + temp_delta_delta_g;
+     delta_g_list[i] =  vt_barrier.next_double();
   }
+
+  //delta_g_list[0] = 0;
+  //double temp_delta_delta_g = delta_g/(num_charge_states-1.0);   
+   
+  //for (int i=0;i<num_charge_states-1;i++)
+  //{
+  //   delta_g_list[i+1] = delta_g_list[i] + temp_delta_delta_g;
+  //}
 
   // Read in the dihedrals that need to be altered
   TextFileReader dihedral_data("dihedral_list.dat", "dihedrals");
@@ -183,6 +211,75 @@ rng_type_source(device_type_source()), rng_type_destination(device_type_destinat
      }
      dihedral_list[i][4] = determine_molecule(dihedral_list[i][0]);
   }
+
+  
+  // Read in the angles that need to be altered
+  TextFileReader angle_data("angle_list.dat", "angles");
+
+  // get number of angles
+  char *nangles = angle_data.next_line(1);
+  ValueTokenizer vt_angle(nangles, "\n");
+  num_angles = vt_angle.next_int();
+
+  // get angle types
+  angle_types = new int [num_charge_states];
+  char *natypes = angle_data.next_line(num_charge_states);
+  ValueTokenizer vt1_angle(natypes);
+  for (int i=0;i<num_charge_states;i++)
+  {
+     angle_types[i] = vt1_angle.next_int();  
+  }
+
+  // Get the angles atom indices
+  //fmt::print(screen, "{} {}\n", "The number of dihedrals to process is ", num_dihedrals);  
+  angle_list = new int*[num_angles];
+  
+  for (int i=0;i<num_angles;i++)
+  {
+     angle_list[i] = new int[4];
+     char *angle_line = angle_data.next_line(3);
+     ValueTokenizer vt_angle(angle_line);
+     for (int j=0;j<3;j++)
+     {
+        angle_list[i][j] = vt_angle.next_int();
+     }
+     angle_list[i][3] = determine_molecule(angle_list[i][0]);
+  }
+
+  
+  // Read in the bonds that need to be altered
+  TextFileReader bond_data("bond_list.dat", "bonds");
+
+  // get number of bonds
+  char *nbonds = bond_data.next_line(1);
+  ValueTokenizer vt_bond(nbonds, "\n");
+  num_bonds = vt_bond.next_int();
+
+  // get bonds types
+  bond_types = new int [num_charge_states];
+  char *nbtypes = bond_data.next_line(num_charge_states);
+  ValueTokenizer vt1_bond(nbtypes);
+  for (int i=0;i<num_charge_states;i++)
+  {
+     bond_types[i] = vt1_bond.next_int();  
+  }
+
+  // Get the dihedral atom indices
+  //fmt::print(screen, "{} {}\n", "The number of dihedrals to process is ", num_dihedrals);  
+  bond_list = new int*[num_bonds];
+  
+  for (int i=0;i<num_bonds;i++)
+  {
+     bond_list[i] = new int[3];
+     char *bond_line = bond_data.next_line(2);
+     ValueTokenizer vt_bond(bond_line);
+     for (int j=0;j<2;j++)
+     {
+        bond_list[i][j] = vt_bond.next_int();
+     }
+     bond_list[i][2] = determine_molecule(bond_list[i][0]);
+  }
+  
    
    // Initialize the dynamic doping efficiency array
    dde = new double [num_charge_states];
@@ -848,7 +945,7 @@ int FixRMCPartial::determine_charge_state(struct Mol* molecule, double d_or_s)
           for (int j=0;j<num_charge_states;j++)
           {
              //fmt::print(screen, "{} {} {} {}\n", "Test charge:", test_charge, "atom charge:", semiconductor_charges[j][local_tag-1]);
-             if (fabs(test_charge - semiconductor_charges[j][local_tag-1]) < 1e-5)
+             if (fabs(test_charge - semiconductor_charges[j][local_tag-1]) < 1e-7)
              {
                 charge_indicator[comm->me] = j;
                 //fmt::print(screen, "{} {}\n", "We identified the charge state as ", j);
@@ -865,7 +962,7 @@ int FixRMCPartial::determine_charge_state(struct Mol* molecule, double d_or_s)
           for (int j=0;j<num_charge_states;j++)
           {
             //fmt::print(screen, "{} {} {} {}\n", "Test charge:", test_charge, "atom charge:", dopant_charges[j][local_tag-1]);
-            if (fabs(test_charge - dopant_charges[j][local_tag-1]) < 1e-5)
+            if (fabs(test_charge - dopant_charges[j][local_tag-1]) < 1e-7)
             {
                charge_indicator[comm->me] = j;
                //fmt::print(screen, "{} {}\n", "We identified the charge state as ", j);
@@ -921,6 +1018,93 @@ double FixRMCPartial::change_dihedral_parameters(int molecule_id, int ending_sta
                   //fmt::print(screen, "{} {} {} {}\n", "Found the dihedral, switching from type", 
                   //           atom->dihedral_type[i][j], "to", dihedral_types[ending_state]);
                   atom->dihedral_type[i][j] = dihedral_types[ending_state];
+                }
+             } 
+           }
+        }
+      }
+   }
+
+   // Update all the dihedral information in the neighbor lists
+   // since that is what is used in the energy calculation
+   neighbor->build_topology();
+
+   // Now calculate the new energy
+   double new_energy = energy_full();
+   double energy_diff = new_energy - pre_energy;
+   return energy_diff;
+}
+
+double FixRMCPartial::change_angle_parameters(int molecule_id, int ending_state)
+{
+   // go to ending_state
+   
+   double pre_energy = energy_full();
+   
+   // Circle through the relevant dihedrals and see if any need to be modified.
+   for (int a=0;a<num_angles;a++)
+   {
+      if (angle_list[a][3] == molecule_id)
+      { // this dihedral type needs to be modified
+        // First we need to find the dihedral in the main data structure
+        for (int i=0;i<atom->nlocal;i++) 
+        {
+           if (atom->tag[i] == angle_list[a][1])
+           {
+             for (int j=0;j<atom->num_angle[i];j++)
+             {
+                if (atom->angle_atom1[i][j] == angle_list[a][0] &&
+                    atom->angle_atom2[i][j] == angle_list[a][1] &&
+                    atom->angle_atom3[i][j] == angle_list[a][2])
+                {
+                  // switch to new type
+                  
+                  fmt::print(screen, "{} {} {} {}\n", "Found the angle, switching from type", 
+                          atom->angle_type[i][j], "to", angle_types[ending_state]);
+                  atom->angle_type[i][j] = angle_types[ending_state];
+                }
+             } 
+           }
+        }
+      }
+   }
+
+
+   // Update all the dihedral information in the neighbor lists
+   // since that is what is used in the energy calculation
+   neighbor->build_topology();
+
+   // Now calculate the new energy
+   double new_energy = energy_full();
+   double energy_diff = new_energy - pre_energy;
+   return energy_diff;
+}
+
+double FixRMCPartial::change_bond_parameters(int molecule_id, int ending_state)
+{
+   // go to ending_state
+   
+   double pre_energy = energy_full();
+   
+   // Circle through the relevant dihedrals and see if any need to be modified.
+   for (int b=0;b<num_bonds;b++)
+   {
+      if (bond_list[b][2] == molecule_id)
+      { // this dihedral type needs to be modified
+        // First we need to find the dihedral in the main data structure
+        for (int i=0;i<atom->nlocal;i++) 
+        {
+           if (atom->tag[i] == bond_list[b][0])
+           {
+             for (int j=0;j<atom->num_bond[i];j++)
+             {
+                if (atom->bond_atom[i][j] == bond_list[b][1])
+                {
+                  // switch to new type
+                  
+                  fmt::print(screen, "{} {} {} {}\n", "Found the bonds, switching from type", 
+                             atom->bond_type[i][j], "to", bond_types[ending_state]);
+                  atom->bond_type[i][j] = bond_types[ending_state];
                 }
              } 
            }
@@ -1047,6 +1231,7 @@ void FixRMCPartial::restore_charge(struct Mol *molecule)
 
 }
 
+
 void FixRMCPartial::make_move()
 {
     double reaction_energy = 0.0;
@@ -1055,6 +1240,8 @@ void FixRMCPartial::make_move()
     double prefactor = 0.0;
     double transition_probability = 0.0;
     double edihedral = 0.0;
+    double ebond = 0.0;
+    double eangle = 0.0;
 
     //Clear the osc dopant combined structures
    // this is probably unnecessary and adds more time, but I'm doing it for peace of mind
@@ -1105,18 +1292,26 @@ void FixRMCPartial::make_move()
       while (c_indicator != 0)
       {
          rand_charge = type_dist(rng_type_source);
+         //fmt::print(screen, "{} {}\n", "Candidate charge state ", rand_charge);
          if (num_semiconductor_charge[rand_charge] != 0 && num_dopant_charge[rand_charge] != 0)
          {
             c_indicator = 0;
          }
       }
-      //fmt::print(screen, "{}, {}\n", "We have chosen charge state", charges[rand_charge]);
-
+      fmt::print(screen, "{}, {}\n", "We have chosen charge state", charges[rand_charge]);
+      int tries=0;
       while (indicator != 0) {
          rand_semi = atom_dist(rng_atom);
-         if (molecule_type[rand_semi-1] == 0 && molecule_charge_states[rand_semi-1] == charges[rand_charge])
+         //fmt::print(screen, "{} {}\n", "The candidate molecule is ", rand_semi);
+         //fmt::print(screen, "{} {} {} {}\n", "The candidate is of type", molecule_type[rand_semi-1],"with stated charge",molecule_charge_states[rand_semi-1]);
+         if (molecule_type[rand_semi-1] == 0 && fabs(molecule_charge_states[rand_semi-1] - charges[rand_charge]) < 0.001)
          {
             indicator = 0;
+         }
+         tries=tries+1;
+         if (tries > 10000)
+         {
+            error->all(FLERR, "Too many attemps at finding a semiconductor, something is going wrong!");
          }
          //rand_semi = atom_dist(rng);
          //if (molecule_type[rand_semi-1] == 0)
@@ -1154,7 +1349,7 @@ void FixRMCPartial::make_move()
           rand_dope = atom_dist(rng_atom);
           if (molecule_type[rand_dope-1] == 1) 
           {
-             if (molecule_charge_states[rand_dope-1] == -molecule_charge_states[rand_semi-1])
+             if (fabs(molecule_charge_states[rand_dope-1] + molecule_charge_states[rand_semi-1]) < 0.001)
              {
                fmt::print(screen, "{}\n", "FOUND EQUALITY");
                fmt::print(screen, "{} {} {} {}\n", "Semiconductor charge, ", molecule_charge_states[rand_semi-1], " = Dopant charge ", molecule_charge_states[rand_dope-1]);
@@ -1234,7 +1429,9 @@ void FixRMCPartial::make_move()
 
     // Change the dihedral parameters to destination type 
     // and capture the dihedral energy
-    // edihedral = change_dihedral_parameters(rand_semi, destination_charge_state);
+    edihedral = change_dihedral_parameters(rand_semi, destination_charge_state);
+    //eangle = change_angle_parameters(rand_semi, destination_charge_state);
+    //ebond = change_bond_parameters(rand_semi, destination_charge_state);
 
     // Modify charge to new type
     modify_charge(&semiconductor, semiconductor_charges[destination_charge_state]);
@@ -1259,6 +1456,7 @@ void FixRMCPartial::make_move()
 
     if (comm->me == 0)
     {
+       fmt::print(screen, "{} {}\n", "The dihedral energy change is ", edihedral);
        fmt::print(screen, "{} {}\n", "The semiconductor self energy difference is ", e_osc_diff);
        fmt::print(screen, "{} {}\n", "The dopant self-energy difference is ", e_dopant_diff);
        fmt::print(screen, "{} {} {}\n", "The cross-energy before and after doping are ", interaction_energy[0], interaction_energy[1]);
@@ -1276,8 +1474,13 @@ void FixRMCPartial::make_move()
     // Recalculate energy after these changes
     // subtract the dihedral energy, that has to be put back in with more thought later
     double new_energy = energy_full();
-    double energy_diff = new_energy - starting_energy + reaction_energy - e_osc_diff - e_dopant_diff;
+    double energy_diff = new_energy - starting_energy + reaction_energy - e_osc_diff - e_dopant_diff - edihedral;
+    double total_electrostatic_diff = new_energy - starting_energy - e_osc_diff - e_dopant_diff - edihedral;
 
+    if (comm->me == 0)
+    {
+       fmt::print(screen, "{} {}\n",  "Total Electrostatic Energy Difference: ", total_electrostatic_diff);
+    }
     // Calculate acceptance probability
     transition_probability = prefactor*exp(-beta*energy_diff);
 
@@ -1340,7 +1543,9 @@ void FixRMCPartial::make_move()
        rejections = rejections+1;
 
        // Revert dihedral coefficients
-       // edihedral = change_dihedral_parameters(rand_semi, semiconductor.charge_state);
+       edihedral = change_dihedral_parameters(rand_semi, semiconductor.charge_state);
+       //eangle = change_angle_parameters(rand_semi, semiconductor.charge_state);
+       //ebond = change_bond_parameters(rand_semi, semiconductor.charge_state);
 
        if (comm->me == 0)
        { 
@@ -1426,6 +1631,35 @@ void FixRMCPartial::post_mortem()
       total_charged_semiconductors = total_charged_semiconductors+num_semiconductor_charge[i];
    }
    double total_doping_efficiency = (double)total_charged_dopants/(double)n_dopant;
+
+   // Write out COM for all molecules, for RDF/morphology or other CG uses
+
+   if (comm->me == 0)
+   {
+      FILE *fcom = fopen("com.xyz", "w");
+      fprintf(fcom, "%d\n",n_molecules);
+      for (int j=0;j<3;j++)
+      {
+         fprintf(fcom, "%f %f\n", domain->boxlo[j], domain->boxhi[j]);
+      }
+      fprintf(fcom, "LAMMPS_RMC_output\n");
+      fclose(fcom);
+   }
+
+   double *com;
+   com = new double[3];
+   for (int i=0;i<n_molecules;i++)
+   {
+      Mol molecule = get_molecule(i+1,size_limit);
+      calculateMoleculeCOM(com, &molecule);
+      if (comm->me == 0)
+      {
+         FILE *fcom = fopen("com.xyz", "a");
+         fprintf(fcom, "%d %f %f %f\n", i+1,com[0],com[1],com[2]);
+         fclose(fcom);
+      }
+      delete_molecule(&molecule);  
+   }
  
    if (comm->me == 0)
    {

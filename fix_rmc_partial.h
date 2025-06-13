@@ -35,6 +35,8 @@ class FixRMCPartial: public Fix {
    int determine_dopant_or_semiconductor(int);
    double energy_full();
    double change_dihedral_parameters(int, int);
+   double change_angle_parameters(int, int);
+   double change_bond_parameters(int, int);
    void initial_integrate(int) override;
    void make_move();
    void post_mortem();
@@ -80,6 +82,8 @@ class FixRMCPartial: public Fix {
    int type_threshold;
    int num_charge_states;
    int num_dihedrals;
+   int num_angles;
+   int num_bonds;
    int restart;
    
    int acceptances;
@@ -107,6 +111,10 @@ class FixRMCPartial: public Fix {
 
    int *dihedral_types;
    int **dihedral_list;
+   int *angle_types;
+   int **angle_list;
+   int *bond_types;
+   int **bond_list;
    double *delta_g_list;
    double *charges;
    double *dde;
